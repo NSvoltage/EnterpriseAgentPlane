@@ -259,6 +259,153 @@ Before a tool is invoked:
 
 ---
 
+## ADR-012: Surface-Agnostic Harness Design
+
+**Status:** Accepted  
+**Date:** 2026-04-08
+
+### Context
+
+Enterprise teams invoke agents from multiple surfaces: GitHub, Slack, web dashboards, APIs, scheduled automation. Each surface has different event formats, authentication mechanisms, and result delivery requirements.
+
+Previous approach: Build separate systems for each surface.
+
+### Decision
+
+Implement one **durable Task harness** with multiple **surface-specific adapters**.
+
+All adapters (GitHub, Slack, web, automation) normalize their events into TaskRequest, which TaskManager converts to Task. Task lifecycle is surface-agnostic. Results flow back through surface-specific callbacks.
+
+```
+┌─────────────────────────────────────────────────┐
+│  Surface-Specific Entry Points                  │
+│  (GitHub webhook, Slack event, web POST,        │
+│   scheduled cron, CLI invoke)                   │
+└──────────────┬──────────────────────────────────┘
+               │
+        ┌──────▼──────┐
+        │  Normalizer │ (surface-specific)
+        │  (extract   │  - Verify auth/signature
+        │   user,     │  - Extract intent
+        │   context)  │  - Convert to TaskRequest
+        └──────┬──────┘
+               │
+        ┌──────▼──────────┐
+        │ TaskManager     │ (surface-agnostic)
+        │ (create_task,   │ - Store Task durably
+        │  get_task,      │ - Manage state
+        │  update_task)   │ - Trigger execution
+        └──────┬──────────┘
+               │
+        ┌──────▼──────┐
+        │  AgentCore  │ (surface-agnostic)
+        │  (sandbox)  │ - Ephemeral execution
+        │             │ - Scoped credentials
+        │             │ - Tool access control
+        └──────┬──────┘
+               │
+        ┌──────▼──────┐
+        │  Callbacks  │ (surface-specific)
+        │  (result    │ - GitHub: post comment/PR
+        │   delivery) │ - Slack: post thread reply
+        │             │ - Web: update run dashboard
+        └─────────────┘
+```
+
+### Consequences
+
+✓ **Code reuse** — State management, approval logic, audit trail written once  
+✓ **Consistency** — Same rules, same visibility, same approval gates across all surfaces  
+✓ **Easy to extend** — Add new surface = implement Normalizer + Callback interfaces  
+✓ **Security** — Boundaries enforced consistently, not per-surface  
+✓ **Testability** — TaskManager tested independently of surface adapters  
+
+✗ Requires abstraction (but minimal—just TaskRequest and TaskResult)  
+✗ Cannot do surface-specific optimizations (acceptable for v1)  
+
+**Alternatives Considered:**
+
+1. **Surface-specific systems** (separate harness for GitHub, Slack, etc.)
+   - Pro: Each system could optimize for its surface
+   - Con: Duplicate work, inconsistent security, divergent UX
+   - Rejected: Violates DRY principle, scales poorly
+
+2. **GitHub-only** (build for GitHub, add others later)
+   - Pro: Simpler for v1
+   - Con: Architecture becomes GitHub-specific, hard to refactor
+   - Rejected: Leads to surface-specific architecture decisions
+
+**Implications:**
+
+- PR 3-4 (models, GitHub adapter) are reference implementations
+- PRs 5-8 include Slack adapter (v1.5), web adapter (v1.5), automation adapter (v2)
+- Tool Gateway, Validation, Observability layers are surface-agnostic
+- All security boundaries apply equally to all surfaces
+
+---
+
+## ADR-013: Scheduled Automation as First-Class Workflow
+
+**Status:** Accepted  
+**Date:** 2026-04-08
+
+### Context
+
+Enterprise agents are triggered by:
+- Interactive user requests (GitHub comment, Slack mention, web form)
+- Scheduled automation (nightly checks, recurring cleanup, verification loops)
+- Internal systems (API, webhook from other tools)
+
+Current design handles interactive requests. Scheduled automation is v2 scope. But architecture should anticipate it.
+
+### Decision
+
+Scheduled automation creates Tasks using the **same TaskManager, same Task model, same state machine** as interactive work.
+
+```python
+# Interactive (GitHub webhook)
+task = await task_manager.create_task(
+    TaskRequest(
+        trigger_type="github_comment",
+        trigger_id="comment_123",
+        workflow_type=WorkflowType.ANSWER_ONLY,
+        # ...
+    )
+)
+
+# Scheduled (cron automation)
+task = await task_manager.create_task(
+    TaskRequest(
+        trigger_type="scheduled_automation",
+        trigger_id="nightly_check_123",
+        workflow_type=WorkflowType.TOOL_MUTATION,
+        # ...
+    )
+)
+
+# Both create Tasks with identical visibility, audit trail, approval gates
+```
+
+### Consequences
+
+✓ **Unified visibility** — All work (interactive + automated) visible in same dashboard  
+✓ **Same approval model** — Scheduled mutations still require approval, same gates  
+✓ **Consistent audit trail** — CloudTrail logs interactive and automated work identically  
+✓ **Easy to inspect** — "Show me all tasks created by nightly automation" is straightforward  
+✓ **Simple resumption** — If automation run fails, retry with same Task machinery  
+
+✗ Scheduled automation can't be "fire-and-forget" (it has durable state, approval gates)  
+✗ Requires approval infrastructure even for automation (but this is a feature, not a bug)  
+
+**Implications:**
+
+- Task model anticipates automation workflows (trigger_type enum includes "scheduled")
+- PR 5-8 will implement CronEventNormalizer (same as GitHubEventNormalizer pattern)
+- Approval gates apply to both interactive and automated mutations
+- v2 roadmap includes automation scheduler (Airflow-like, but integrated with TaskManager)
+
+---
+
 ## Review Criteria (Using These ADRs)
 
 When reviewing PRs, check:
@@ -275,10 +422,13 @@ When reviewing PRs, check:
 10. **Does the code follow ADR-010?** — Validation is an interface?
 11. **Does the code follow ADR-011?** — Approvals are centralized?
 
+12. **Does the code follow ADR-012?** — Surface-agnostic harness design?
+13. **Does the code follow ADR-013?** — Scheduled automation as first-class?
+
 If the answer to any is "no," the PR should not be merged.
 
 ---
 
-**Document version:** 1.0  
+**Document version:** 1.1  
 **Last updated:** 2026-04-08  
 **Status:** Authoritative for v1 implementation

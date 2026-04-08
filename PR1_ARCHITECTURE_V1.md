@@ -1,6 +1,93 @@
-# Architecture — Claude Code on Bedrock v1
+# Architecture — Collaborative Cloud Agent Runtime v1
 
-A detailed explanation of how the GitHub-first enterprise deployment foundation works.
+A detailed explanation of how the surface-agnostic collaborative agent runtime works.
+
+---
+
+## Surface-Agnostic Design
+
+The architecture is **intentionally surface-agnostic**. Any workflow surface can create Tasks.
+
+### Adapter Pattern
+
+Each surface implements a thin **Event Normalizer** that converts surface-specific events into TaskRequest:
+
+```
+GitHub Webhook          → GitHubEventNormalizer    → TaskRequest → Task
+Slack Event            → SlackEventNormalizer     → TaskRequest → Task
+Web POST               → APIRequestNormalizer     → TaskRequest → Task
+Cron Trigger           → CronEventNormalizer      → TaskRequest → Task
+CLI Invocation         → CLIArgumentNormalizer    → TaskRequest → Task
+```
+
+**All end up at the same place: TaskManager.create_task(request)**
+
+### Why Surface-Agnostic?
+
+**Problem:** Enterprise teams use multiple workflow surfaces. Building a different system for each creates:
+- Duplicate work (state management, approval logic, audit trails)
+- Inconsistent user experience (different UIs, different approval paths)
+- Security gaps (different verification, different audit trails)
+
+**Solution:** One durable Task model, multiple ingress adapters.
+
+### Example: Multi-Surface Workflow
+
+```python
+# User starts in Slack
+task = await slack_normalizer.normalize(slack_event)
+task_id = await task_manager.create_task(task)
+# Task created with source surface = "slack_thread"
+
+# Task executes in AgentCore sandbox
+await task_manager.update_task(task_id, TaskUpdate(state=TaskState.RUNNING))
+
+# Agent generates PR as artifact
+artifact = TaskArtifact(task_id=task_id, artifact_type=TaskArtifactType.GITHUB_PR, content_url=pr_url)
+
+# Slack callback posts result back to original thread
+await slack_callback.post_thread_update(task.trigger_id, f"PR ready: {pr_url}")
+
+# User can also see same task in web UI
+# Web UI shows task.id, task.state, task.artifacts, task.created_at, etc.
+# All surfaces point to same Task record
+```
+
+### GitHub as v1 Example
+
+GitHub is the **primary v1 surface** because:
+1. Code-centric workflows (pull requests, reviews, commits)
+2. Existing event stream (webhooks available)
+3. Strong authentication (GitHub App OAuth)
+4. Clear approval path (PR reviews)
+
+But the architecture is **not GitHub-specific**. Slack, web, and automation are equally supported.
+
+### Multi-Surface Sync (v1.5)
+
+When a task is created from one surface, results flow back to **all interested surfaces**:
+
+```
+GitHub webhook creates task
+    ↓
+Task executes
+    ↓
+Result artifact created (e.g., code diff)
+    ↓
+GitHub callback posts comment ─────┐
+Slack callback posts thread reply ─┼─ Same TaskResult
+Web callback updates dashboard ───┘
+
+User can:
+- Review on GitHub PR
+- Approve in Slack thread
+- Monitor on web dashboard
+- All interactions sync back to Task record
+```
+
+Design not yet implemented (v1.5 scope), but model supports it.
+
+---
 
 ## System Overview
 

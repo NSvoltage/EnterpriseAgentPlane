@@ -1,6 +1,28 @@
-# Security Boundaries — Claude Code on Bedrock v1
+# Security Boundaries — Collaborative Cloud Agent Runtime
 
-A clear articulation of what is protected, what is assumed safe, and what requires customer action.
+**Applies to all surfaces.** Whether a Task is triggered by GitHub webhook, Slack event, web API, or scheduled automation, these boundaries apply identically.
+
+This document defines the explicit execution boundaries for collaborative agents. The goal is clarity: what can an agent access? What can it mutate? What decisions require human approval?
+
+**This is not "we hope nothing bad happens." This is "here are the exact rules, consistently enforced across all entry points."**
+
+---
+
+## Design Philosophy
+
+**Boundary-First Security:** In the words of Harvey's Spectre design:
+
+> "Once an agent can run commands, read and write files, inspect telemetry, push branches, or call internal tools, security is no longer something added in review after the fact. It becomes part of the runtime design itself."
+
+Every surface (GitHub, Slack, web, API, automation) crosses the same explicit boundaries:
+1. **Sandbox boundary** — What can the agent perceive?
+2. **Tool boundary** — What operations can it attempt?
+3. **Approval boundary** — What needs human sign-off?
+4. **Audit boundary** — What's logged and why?
+
+These boundaries are **the same regardless of entry point**.
+
+---
 
 ## Threat Model
 

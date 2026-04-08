@@ -1,6 +1,15 @@
 # Scenarios — Work Backwards from Customer Reality
 
-This document is copied from the EnterpriseAgentPlane working-backwards pack and serves as the authoritative contract for what "in v1" means.
+Six scenarios that define the scope of v1-v2. Each scenario is **surface-agnostic**—can be triggered from GitHub, Slack, web, or automation.
+
+Scenarios are organized by **permission level and state mutation**:
+- **S1-S2:** Read-only and safe mutations (no approval required)
+- **S3-S5:** Mutations requiring approval (approval gates, tool authorization)
+- **S6:** Out of scope (too large, requires different architecture)
+
+Each scenario defines the **contract** (input, processing, output) independent of surface. GitHub adapter is shown as v1 example, but Slack adapter, web adapter, and automation trigger would follow identical contracts.
+
+---
 
 ## 1. Product Frame
 
@@ -110,6 +119,43 @@ This is the safest wedge to prove:
 - task timeout
 - model returns insufficient answer
 - stale branch / stale PR context
+
+#### Surface Examples (Same Contract)
+
+**GitHub (v1):**
+```
+User comments: "@claude explain this error"
+  ↓
+GitHubEventNormalizer converts to TaskRequest
+  ↓
+Task executes, LLM generates explanation
+  ↓
+GitHubStatusCallback posts comment with explanation
+```
+
+**Slack (v1.5):**
+```
+User mentions: "@claude explain this error"
+  ↓
+SlackEventNormalizer converts to TaskRequest (identical TaskRequest)
+  ↓
+Task executes (identical execution, same AgentCore)
+  ↓
+SlackStatusCallback posts thread reply with explanation
+```
+
+**Web (v1.5):**
+```
+User submits form on dashboard
+  ↓
+APIRequestNormalizer converts to TaskRequest
+  ↓
+Task executes (identical)
+  ↓
+WebStatusCallback updates run dashboard
+```
+
+**The TaskRequest, TaskManager, AgentCore, and TaskResult are identical. Only entry and exit differ.**
 
 ---
 

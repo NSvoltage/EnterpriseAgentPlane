@@ -293,21 +293,41 @@ class GitHubEventNormalizer:
     def _parse_command(self, comment_body: str) -> Tuple[str, Optional[str]]:
         """Parse @claude command from comment.
 
-        Looks for:
-          @claude <command> <args...>
+        Syntax:
+            @claude <command> [<args...>]
 
-        Returns:
-            (command_type, command_text)
+        Behavior:
+        ─────────
+        1. Looks for @claude mention (case-insensitive: @claude, @CLAUDE, @Claude)
+        2. Extracts first word after @claude as command
+        3. Everything after command is treated as arguments
+
+        Defaults:
+        ─────────
+        - If no @claude mention: returns ("explain", None)
+            Rationale: Safest assumption when no explicit command
+        - If unrecognized command: returns ("explain", <args>)
+            Rationale: Safe fallback, logs warning in production
 
         Examples:
-            "@claude explain why this fails"
-              → ("explain", "why this fails")
+        ────────
+        "@claude explain why this fails"
+            → ("explain", "why this fails")
 
-            "@claude fix the null handling"
-              → ("fix", "the null handling")
+        "@claude fix the null handling"
+            → ("fix", "the null handling")
 
-            "@claude review this"
-              → ("review", "this")
+        "@claude review this"
+            → ("review", "this")
+
+        "No claude mention here"
+            → ("explain", None)  # Default
+
+        "@claude unknown_command here"
+            → ("explain", "unknown_command here")  # Fallback to explain
+
+        Note: Arguments are NOT split further; everything after the
+        command word is treated as a single argument string.
         """
         if "@claude" not in comment_body.lower():
             # No @claude mention; default to explain

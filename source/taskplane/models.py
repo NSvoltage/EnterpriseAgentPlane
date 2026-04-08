@@ -115,7 +115,38 @@ class TaskArtifact(BaseModel):
 
 
 class Task(BaseModel):
-    """A unit of work triggered by a GitHub event."""
+    """A unit of work triggered by a GitHub event.
+
+    State Machine (validated by TaskManager implementation, not model):
+    ─────────────────────────────────────────────────────────────
+    QUEUED → RUNNING
+        Task execution has started.
+
+    RUNNING → COMPLETED | FAILED | CANCELED
+        Task execution has finished (normal termination).
+
+    RUNNING → WAITING_FOR_APPROVAL
+        Task requires human approval (mutation workflows only).
+
+    WAITING_FOR_APPROVAL → RUNNING
+        Approval was granted, proceed with execution.
+
+    WAITING_FOR_APPROVAL → FAILED
+        Approval was denied or timed out.
+
+    Terminal States (no further transitions possible):
+    ──────────────────────────────────────────────
+    - COMPLETED: Task succeeded
+    - FAILED: Task encountered error or approval denied
+    - CANCELED: Task was cancelled by user/admin
+
+    Implementation Note:
+    ───────────────────
+    This model defines the data structure only. State transitions are
+    validated by TaskManager implementations (e.g., PostgreSQL, DynamoDB).
+    The model does not enforce transition rules; that's the responsibility
+    of the TaskManager.update_task() method.
+    """
 
     # === Identity ===
     id: str = Field(default_factory=lambda: f"task_{uuid4().hex[:12]}")
@@ -375,24 +406,40 @@ class TaskError(Exception):
 
 class TaskNotFoundError(TaskError):
     """Task with given ID does not exist."""
-    pass
+    def __init__(self, task_id: str):
+        self.task_id = task_id
+        super().__init__(f"Task {task_id} not found")
 
 
 class TaskCreationError(TaskError):
     """Task could not be created."""
-    pass
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(f"Task creation failed: {reason}")
 
 
 class InvalidStateTransition(TaskError):
     """Task state transition is invalid."""
-    pass
+    def __init__(self, task_id: str, current_state: TaskState, target_state: TaskState):
+        self.task_id = task_id
+        self.current_state = current_state
+        self.target_state = target_state
+        super().__init__(
+            f"Cannot transition task {task_id} from {current_state.value} to {target_state.value}"
+        )
 
 
 class CannotCancelError(TaskError):
     """Task cannot be canceled (already terminal)."""
-    pass
+    def __init__(self, task_id: str, current_state: TaskState):
+        self.task_id = task_id
+        self.current_state = current_state
+        super().__init__(f"Cannot cancel task {task_id} (current state: {current_state.value})")
 
 
 class CannotRetryError(TaskError):
     """Task cannot be retried (not in FAILED state)."""
-    pass
+    def __init__(self, task_id: str, current_state: TaskState):
+        self.task_id = task_id
+        self.current_state = current_state
+        super().__init__(f"Cannot retry task {task_id} (current state: {current_state.value})")

@@ -1,0 +1,25 @@
+Requirement ID,Requirement,Scenarios,Priority,Why customer needs it,Candidate primitive,Fit,Reality / constraint,Build decision
+R1,Enterprise SSO / federation,All,Must,Current repo foundation,IAM OIDC provider or Cognito Identity Pools,Green,Already core to current repo; local/native-app flow today,Current repo
+R2,Per-user attribution,All,Must,Audit and operator trust,Session tags + CloudTrail,Green,Current repo already tags user email and subject claim,Current repo
+R3,Bedrock model allowlist / region scoping,All,Must,Operator governance,Current repo IAM policies + config,Green,Current repo already scopes model invocation to configured regions,Current repo
+R4,GitHub issue / PR / comment ingress,"S1,S2,S3,S4,S5",Must,Meet developers where they already work,Claude Code Action / GitHub App patterns,Green,Most credible first workflow surface,Build in v1
+R5,Task lifecycle API,All,Must,"Need async work, retries, status, cancellation",AgentCore Runtime-backed task service,Yellow,Need to build control-plane layer; not in current repo,Build in v1
+R6,Background async execution,"S1,S2,S3,S4,S5",Must,Longer-running tasks than local CLI,AgentCore Runtime async jobs,Green,"Strong fit, but honor 8h max / 15m sync timeout",Build in v1
+R7,Session isolation,All,Must,Multi-user security boundary,AgentCore Runtime sessions,Green,Dedicated microVM sessions are strong fit,Build in v1
+R8,Persistent workspaces,"S2,S6",Should,Useful for coding iteration and resume,AgentCore session storage,Yellow,Preview; do not make hard dependency,Feature-flag / later
+R9,Answer-only workflow,"S1,S3,S4",Must,Low-risk adoption wedge,GitHub adapter + task service,Green,Easy to prove value without mutation risk,Build in v1
+R10,PR draft / repo mutation workflow,S2,Must,Core coding-agent value,GitHub adapter + Claude Code + validation hooks,Green,Constrain to enabled repos and PR draft outcomes,Build in v1
+R11,Deterministic validation hooks,"S2,S3",Must,Trust before PR / merge,Validation interface; CodeBuild can be first backend,Yellow,Need interface + backend; do not overclaim universal sandbox,Build interface in v1
+R12,Read-only internal tools,S4,Should,High enterprise value with low blast radius,AgentCore Gateway + curated tools,Yellow,"Good fit, but requires connector curation and policy design",Curated in v1
+R13,Mutation-capable internal tools,S5,Should,Important but risky,AgentCore Gateway + approval gate,Yellow,Need policy + approval + narrow curated set,Very limited v1
+R14,Enterprise Tool Gateway abstraction,"S4,S5",Must,Prevent ad hoc tool sprawl,Gateway registry + connector interface,Yellow,Build abstraction first; avoid protocol-led scope,Build in v1
+R15,MCP target support,"S4,S5",Should,Some tools will arrive via MCP,AgentCore Gateway MCP targets,Yellow,"Support as target type, not product center",Limited v1
+R16,Fine-grained policy on tool access,"S4,S5",Should,Enterprise safety,AgentCore Policy / Cedar + IAM,Yellow,Current policy limitations; do not oversell principal-level fine-grained auth,Limited v1
+R17,Slack / chat ingress,Future,Won't for v1,"Useful later, but less mature than GitHub",Lambda-based integration pattern,Yellow,"Reference pattern exists, but not strong enough for primary v1 claim",Defer to v1.5
+R18,Teams / Jira / ServiceNow ingress,Future,Won't for v1,Broader enterprise accessibility,Custom adapters,Red,No strong first-party build path validated in current research,Defer
+R19,Private/VPC deployment mode,All,Should,Some enterprises require private topologies,AgentCore VPC + PrivateLink + advanced docs,Yellow,"Possible, but not simplest default path; needs careful docs",Advanced mode
+R20,Observability and admin dashboards,All,Must,"Ops, adoption, cost, audit",Current OTEL/ALB/ECS/CloudWatch stack + task telemetry,Green,Current repo foundation is strong; extend it with task metrics,Build in v1
+R21,Repo sensitivity tiers / policy presets,"S2,S5",Must,Customers need safe rollout by repo class,Config + IAM/policy + admin plane,Yellow,"Must design, not yet in current repo",Build in v1
+R22,Kill switch / revoke capability,All,Must,Essential operator control,Admin config + policy disable flags,Yellow,Need explicit feature in new control plane,Build in v1
+R23,Heavy monorepo / mobile builds,S6,Won't for core v1,Avoid false promise,Pluggable heavier backend later,Red,AgentCore not universal heavy sandbox; do not scope into v1,Out of scope
+R24,Bring-your-own-agent adapter model,Future,Should,Preserve long-term optionality,Adapter contract,Yellow,"Important architecture choice, but not v1 requirement",Design for v2
